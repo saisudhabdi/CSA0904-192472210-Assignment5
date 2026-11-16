@@ -99,7 +99,6 @@ public class PassStore {
 
         System.out.println(Arrays.toString(store.find("P1003")));
         System.out.println(Arrays.toString(store.find("P1002")));
-        System.out.println("Route 7 passes: " + store.listByRoute(7).size());
 
         Files.deleteIfExists(f);
     }
