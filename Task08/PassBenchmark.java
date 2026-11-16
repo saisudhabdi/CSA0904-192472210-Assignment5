@@ -97,6 +97,34 @@ public class PassBenchmark {
         return System.nanoTime() - start;
     }
 
+    private static long runBatchAutoCommit(Connection con, List<String[]> rows) throws SQLException {
+        clear(con);
+        con.setAutoCommit(true);
+        long start = System.nanoTime();
+        String sql = "INSERT INTO bus_pass VALUES (?,?,?,?,?)";
+        try (PreparedStatement ps = con.prepareStatement(sql)) {
+            int pending = 0;
+            for (String[] p : rows) {
+                ps.setString(1, p[0]);
+                ps.setString(2, p[1]);
+                ps.setString(3, p[2]);
+                ps.setInt(4, Integer.parseInt(p[3]));
+                ps.setBigDecimal(5, new java.math.BigDecimal(p[4]));
+                ps.addBatch();
+                pending++;
+                if (pending == 1000) {
+                    ps.executeBatch();
+                    ps.clearBatch();
+                    pending = 0;
+                }
+            }
+            if (pending > 0) {
+                ps.executeBatch();
+            }
+        }
+        return System.nanoTime() - start;
+    }
+
     private static void showMetadata(Connection con) throws SQLException {
         try (Statement st = con.createStatement();
              ResultSet rs = st.executeQuery("SELECT * FROM bus_pass LIMIT 1")) {
@@ -168,16 +196,20 @@ public class PassBenchmark {
                 List<String[]> rows = generate(size);
                 if (size == 10) {
                     runStatement(con, rows);
+                    System.out.println("Statement rows verified: " + rowCount(con));
                     runPrepared(con, rows);
+                    System.out.println("PreparedStatement rows verified: " + rowCount(con));
                     runBatch(con, rows);
+                    System.out.println("Batch rows verified: " + rowCount(con));
                     showMetadata(con);
                 } else {
                     long statement = runStatement(con, rows);
                     long prepared = runPrepared(con, rows);
                     long batch = runBatch(con, rows);
-                    System.out.printf("%d rows | Statement %.2f ms | PreparedStatement %.2f ms | Batch %.2f ms%n",
+                    long batchAutoCommit = runBatchAutoCommit(con, rows);
+                    System.out.printf("%d rows | Statement %.2f ms | PreparedStatement %.2f ms | Batch transaction %.2f ms | Batch auto-commit %.2f ms%n",
                             size, statement / 1_000_000.0, prepared / 1_000_000.0,
-                            batch / 1_000_000.0);
+                            batch / 1_000_000.0, batchAutoCommit / 1_000_000.0);
                 }
             }
             showFailureDifference(con);
